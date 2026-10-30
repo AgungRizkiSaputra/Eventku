@@ -2,20 +2,22 @@
 
 import Link from 'next/link';
 import { AdminNav } from '@/components/admin/admin-nav';
-import { MOCK_EVENTS, MOCK_USERS, MOCK_ORDERS, MOCK_TICKET_TYPES } from '@/lib/mock-data';
+import { useAppContext } from '@/lib/app-context';
 import { formatCurrency } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Users, Calendar, ShoppingCart, DollarSign, AlertCircle, ArrowUpRight } from 'lucide-react';
 
 export default function AdminOverviewPage() {
-  const totalUsers = MOCK_USERS.length;
-  const totalEvents = MOCK_EVENTS.length;
-  const publishedEvents = MOCK_EVENTS.filter((e) => e.status === 'published').length;
-  const totalOrders = MOCK_ORDERS.length;
+  const { users, events, orders, ticketTypes, categories } = useAppContext();
+
+  const totalUsers = users.length;
+  const totalEvents = events.length;
+  const publishedEvents = events.filter((e) => e.status === 'published').length;
+  const totalOrders = orders.length;
 
   let totalGrossRevenue = 0;
-  MOCK_TICKET_TYPES.forEach((tt) => {
+  ticketTypes.forEach((tt) => {
     totalGrossRevenue += tt.sold * tt.price;
   });
 
@@ -84,31 +86,35 @@ export default function AdminOverviewPage() {
           </div>
 
           <div className="bg-ground border border-ground-subtle divide-y divide-ground-subtle">
-            {MOCK_EVENTS.slice(0, 5).map((event) => (
-              <div key={event.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-caption text-ink-faint font-mono">{event.id}</span>
-                    <Badge variant={event.status === 'published' ? 'success' : 'default'}>
-                      {event.status === 'published' ? 'Aktif' : event.status}
-                    </Badge>
-                    {event.is_featured && <Badge variant="accent">Featured</Badge>}
+            {events.slice(0, 5).map((event) => {
+              const category = categories.find((c) => c.id === event.category_id);
+              return (
+                <div key={event.id} className="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-caption text-ink-faint font-mono">{event.id}</span>
+                      <Badge variant="default">{category?.name || 'Event'}</Badge>
+                      <Badge variant={event.status === 'published' ? 'success' : 'default'}>
+                        {event.status === 'published' ? 'Aktif' : event.status}
+                      </Badge>
+                      {event.is_featured && <Badge variant="accent">Featured</Badge>}
+                    </div>
+                    <h3 className="font-medium text-body text-ink">{event.title}</h3>
+                    <p className="text-caption text-ink-muted mt-0.5">
+                      {event.city} · Diajukan oleh Organizer ID: <span className="font-mono">{event.organizer_id}</span>
+                    </p>
                   </div>
-                  <h3 className="font-medium text-body text-ink">{event.title}</h3>
-                  <p className="text-caption text-ink-muted mt-0.5">
-                    {event.city} · Diajukan oleh Organizer ID: {event.organizer_id}
-                  </p>
-                </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <Link href={`/events/${event.id}`} target="_blank">
-                    <Button variant="outline" size="sm">
-                      Tinjau
-                    </Button>
-                  </Link>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Link href={`/events/${event.id}`} target="_blank">
+                      <Button variant="outline" size="sm">
+                        Tinjau
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -117,12 +123,12 @@ export default function AdminOverviewPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-display font-bold text-body-lg text-ink">Peran Pengguna</h2>
             <Link href="/admin/users" className="text-body-sm text-accent hover:underline">
-              Kelola →
+              Kelola Pengguna →
             </Link>
           </div>
 
           <div className="bg-ground border border-ground-subtle divide-y divide-ground-subtle">
-            {MOCK_USERS.map((usr) => (
+            {users.map((usr) => (
               <div key={usr.id} className="p-4 flex items-center justify-between">
                 <div>
                   <p className="text-body-sm font-medium text-ink">{usr.full_name}</p>
@@ -146,10 +152,10 @@ export default function AdminOverviewPage() {
           <div className="mt-6 bg-ground-muted p-4 border border-ground-subtle">
             <p className="text-body-sm font-medium text-ink flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-accent" />
-              Sistem Keamanan & Audit
+              Sistem Keamanan & Audit Role
             </p>
             <p className="text-caption text-ink-muted mt-1">
-              Semua tindakan persetujuan dan perubahan status dicatat untuk integritas tiket dan kepatuhan transaksi.
+              Setiap rute di bawah <code className="font-mono text-xs bg-ground px-1">/admin/*</code> dan <code className="font-mono text-xs bg-ground px-1">/dashboard/*</code> dilindungi oleh sistem proteksi peran (*RoleGuard*).
             </p>
           </div>
         </div>
@@ -157,4 +163,3 @@ export default function AdminOverviewPage() {
     </div>
   );
 }
-

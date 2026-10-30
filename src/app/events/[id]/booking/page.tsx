@@ -2,10 +2,10 @@
 
 import { useState, useMemo, Suspense } from 'react';
 import Link from 'next/link';
-import { useParams, useSearchParams, useRouter } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { Check, ArrowLeft, Minus, Plus } from 'lucide-react';
-import { getEventWithDetails } from '@/lib/mock-data';
-import { formatCurrency, formatDateRange, formatTime, generateOrderCode, generateTicketCode, generateQRData, cn } from '@/lib/utils';
+import { useAppContext } from '@/lib/app-context';
+import { formatCurrency, formatDateRange, cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/lib/auth-context';
@@ -13,16 +13,17 @@ import { useAuth } from '@/lib/auth-context';
 function BookingContent() {
   const params = useParams();
   const searchParams = useSearchParams();
-  const router = useRouter();
   const { user } = useAuth();
+  const { events, ticketTypes, bookTickets } = useAppContext();
 
   const eventId = params.id as string;
-  const eventData = getEventWithDetails(eventId);
+  const eventData = events.find((e) => e.id === eventId || e.slug === eventId);
+  const eventTicketTypes = ticketTypes.filter((tt) => tt.event_id === eventData?.id);
 
   // Parse initial ticket selections from URL
   const initialTickets: Record<string, number> = {};
   if (eventData) {
-    eventData.ticket_types.forEach(tt => {
+    eventTicketTypes.forEach((tt) => {
       const q = searchParams.get(tt.id);
       if (q) initialTickets[tt.id] = parseInt(q) || 0;
     });
@@ -30,9 +31,9 @@ function BookingContent() {
 
   const [step, setStep] = useState(1);
   const [selectedTickets, setSelectedTickets] = useState<Record<string, number>>(initialTickets);
-  const [contactName, setContactName] = useState(user?.full_name || '');
-  const [contactEmail, setContactEmail] = useState(user?.email || '');
-  const [contactPhone, setContactPhone] = useState(user?.phone || '');
+  const [contactName, setContactName] = useState(user?.full_name || 'Andi Pratama');
+  const [contactEmail, setContactEmail] = useState(user?.email || 'andi@example.com');
+  const [contactPhone, setContactPhone] = useState(user?.phone || '081234567890');
   const [attendees, setAttendees] = useState<{ name: string; email: string }[]>([]);
   const [sameAsContact, setSameAsContact] = useState(true);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -44,43 +45,40 @@ function BookingContent() {
   }, [selectedTickets]);
 
   const total = useMemo(() => {
-    if (!eventData) return 0;
-    return eventData.ticket_types.reduce((sum, tt) => {
+    return eventTicketTypes.reduce((sum, tt) => {
       return sum + (selectedTickets[tt.id] || 0) * tt.price;
     }, 0);
-  }, [selectedTickets, eventData]);
+  }, [selectedTickets, eventTicketTypes]);
 
   const orderSummaryItems = useMemo(() => {
-    if (!eventData) return [];
-    return eventData.ticket_types
-      .filter(tt => (selectedTickets[tt.id] || 0) > 0)
-      .map(tt => ({
+    return eventTicketTypes
+      .filter((tt) => (selectedTickets[tt.id] || 0) > 0)
+      .map((tt) => ({
         ...tt,
         quantity: selectedTickets[tt.id],
         subtotal: selectedTickets[tt.id] * tt.price,
       }));
-  }, [selectedTickets, eventData]);
+  }, [selectedTickets, eventTicketTypes]);
 
   if (!eventData) {
     return (
       <div className="pt-24 md:pt-32 pb-section page-padding max-w-wide mx-auto text-center">
         <h1 className="font-display font-bold text-display-md">Event tidak ditemukan</h1>
-        <Link href="/events"><Button className="mt-8">Kembali</Button></Link>
+        <Link href="/events"><Button className="mt-8">Kembali ke Katalog</Button></Link>
       </div>
     );
   }
 
   const updateQuantity = (ticketTypeId: string, delta: number) => {
-    const tt = eventData.ticket_types.find(t => t.id === ticketTypeId);
+    const tt = eventTicketTypes.find((t) => t.id === ticketTypeId);
     if (!tt) return;
     const current = selectedTickets[ticketTypeId] || 0;
     const next = Math.max(0, Math.min(current + delta, tt.max_per_order, tt.quota - tt.sold));
-    setSelectedTickets(prev => ({ ...prev, [ticketTypeId]: next }));
+    setSelectedTickets((prev) => ({ ...prev, [ticketTypeId]: next }));
   };
 
   const goToStep2 = () => {
     if (totalTicketCount === 0) return;
-    // Initialize attendees
     const atts: { name: string; email: string }[] = [];
     for (let i = 0; i < totalTicketCount; i++) {
       if (i === 0 && sameAsContact) {
@@ -120,26 +118,36 @@ function BookingContent() {
 
   const handleConfirm = async () => {
     setIsProcessing(true);
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise((r) => setTimeout(r, 1000));
 
-    const orderCode = generateOrderCode();
-    const tickets = attendees.map(() => {
-      const code = generateTicketCode();
-      return {
-        code,
-        id: `tix-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        qr: generateQRData(code, eventData.id),
-      };
+    const items = Object.entries(selectedTickets)
+      .filter(([_, qty]) => qty > 0)
+      .map(([ticket_type_id, quantity]) => ({ ticket_type_id, quantity }));
+
+    // Book persistent tickets in central state
+    const result = bookTickets({
+      userId: user?.id || 'user-1',
+      eventId: eventData.id,
+      items,
+      attendees,
+      contactName,
+      contactEmail,
+      contactPhone,
+      paymentMethod: 'bank_transfer',
     });
 
-    setOrderResult({ orderCode, tickets });
+    setOrderResult({
+      orderCode: result.order.order_code,
+      tickets: result.tickets.map((t) => ({ code: t.ticket_code, id: t.id })),
+    });
+
     setIsProcessing(false);
     setStep(4);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const updateAttendee = (index: number, field: 'name' | 'email', value: string) => {
-    setAttendees(prev => prev.map((att, i) => i === index ? { ...att, [field]: value } : att));
+    setAttendees((prev) => prev.map((att, i) => (i === index ? { ...att, [field]: value } : att)));
   };
 
   const steps = ['Pilih Tiket', 'Data Peserta', 'Konfirmasi'];
@@ -183,29 +191,29 @@ function BookingContent() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
-        {/* Main area */}
+        {/* Main form flow */}
         <div className="lg:col-span-7 xl:col-span-8">
           {/* Step 1: Ticket selection */}
           {step === 1 && (
             <div>
-              <h2 className="font-display font-bold text-display-sm mb-6">Pilih Tiket</h2>
+              <h2 className="font-display font-bold text-display-sm mb-6">Pilih Tiket & Kuantitas</h2>
               <div className="flex flex-col gap-4">
-                {eventData.ticket_types.map(tt => {
+                {eventTicketTypes.map((tt) => {
                   const remaining = tt.quota - tt.sold;
                   const isSoldOut = remaining <= 0;
                   const qty = selectedTickets[tt.id] || 0;
 
                   return (
-                    <div key={tt.id} className={cn('p-5 bg-ground-muted', isSoldOut && 'opacity-50')}>
+                    <div key={tt.id} className={cn('p-5 bg-ground-muted border border-ground-subtle', isSoldOut && 'opacity-50')}>
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                          <h3 className="text-body font-medium">{tt.name}</h3>
+                          <h3 className="text-body font-bold text-ink">{tt.name}</h3>
                           {tt.description && <p className="text-body-sm text-ink-muted mt-1">{tt.description}</p>}
-                          <p className="text-body font-medium text-accent mt-2">
+                          <p className="text-body font-bold text-accent mt-2">
                             {tt.price > 0 ? formatCurrency(tt.price) : 'Gratis'}
                           </p>
                           <p className="text-caption text-ink-faint mt-1">
-                            {isSoldOut ? 'Habis terjual' : `${remaining} tersisa · Maks ${tt.max_per_order}/pesanan`}
+                            {isSoldOut ? 'Habis terjual' : `Tersisa ${remaining} tiket · Maks ${tt.max_per_order}/pesanan`}
                           </p>
                         </div>
                         {!isSoldOut && (
@@ -214,7 +222,7 @@ function BookingContent() {
                               className="w-9 h-9 flex items-center justify-center bg-ground hover:bg-ground-subtle disabled:opacity-30 transition-colors" aria-label="Kurangi">
                               <Minus className="w-4 h-4" />
                             </button>
-                            <span className="w-8 text-center text-body font-medium">{qty}</span>
+                            <span className="w-8 text-center text-body font-bold">{qty}</span>
                             <button onClick={() => updateQuantity(tt.id, 1)} disabled={qty >= tt.max_per_order || qty >= remaining}
                               className="w-9 h-9 flex items-center justify-center bg-ground hover:bg-ground-subtle disabled:opacity-30 transition-colors" aria-label="Tambah">
                               <Plus className="w-4 h-4" />
@@ -228,7 +236,7 @@ function BookingContent() {
               </div>
               <div className="mt-8">
                 <Button size="lg" onClick={goToStep2} disabled={totalTicketCount === 0}>
-                  Lanjutkan
+                  Lanjutkan ke Data Peserta ({totalTicketCount} Tiket)
                 </Button>
               </div>
             </div>
@@ -237,19 +245,19 @@ function BookingContent() {
           {/* Step 2: Attendee info */}
           {step === 2 && (
             <div>
-              <h2 className="font-display font-bold text-display-sm mb-6">Data Peserta</h2>
+              <h2 className="font-display font-bold text-display-sm mb-6">Data Pemesan & Peserta</h2>
 
-              <div className="mb-8">
-                <h3 className="text-body font-medium mb-4">Informasi Kontak</h3>
+              <div className="mb-8 p-6 bg-ground border border-ground-subtle">
+                <h3 className="text-body font-bold text-ink mb-4">Informasi Kontak Pemesan</h3>
                 <div className="flex flex-col gap-4">
-                  <Input label="Nama Lengkap" value={contactName} onChange={e => setContactName(e.target.value)} error={errors.contactName} />
-                  <Input label="Email" type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)} error={errors.contactEmail} />
-                  <Input label="Nomor Telepon" type="tel" value={contactPhone} onChange={e => setContactPhone(e.target.value)} error={errors.contactPhone} />
+                  <Input label="Nama Lengkap" value={contactName} onChange={(e) => setContactName(e.target.value)} error={errors.contactName} />
+                  <Input label="Email Pemesan" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} error={errors.contactEmail} />
+                  <Input label="Nomor WhatsApp / Telepon" type="tel" value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} error={errors.contactPhone} />
                 </div>
               </div>
 
               <div>
-                <h3 className="text-body font-medium mb-4">Data Peserta ({totalTicketCount} tiket)</h3>
+                <h3 className="text-body font-bold text-ink mb-4">Identitas Tiket Peserta ({totalTicketCount} orang)</h3>
 
                 <label className="flex items-center gap-3 mb-6 cursor-pointer">
                   <span className={cn(
@@ -258,33 +266,33 @@ function BookingContent() {
                   )}>
                     {sameAsContact && <Check className="w-3 h-3 text-ground" />}
                   </span>
-                  <input type="checkbox" checked={sameAsContact} onChange={e => {
+                  <input type="checkbox" checked={sameAsContact} onChange={(e) => {
                     setSameAsContact(e.target.checked);
                     if (e.target.checked && attendees.length > 0) {
                       updateAttendee(0, 'name', contactName);
                       updateAttendee(0, 'email', contactEmail);
                     }
                   }} className="sr-only" />
-                  <span className="text-body-sm">Peserta pertama sama dengan kontak</span>
+                  <span className="text-body-sm font-medium">Peserta pertama sama dengan kontak pemesan</span>
                 </label>
 
                 <div className="flex flex-col gap-6">
                   {attendees.map((att, i) => (
-                    <div key={i} className="p-5 bg-ground-muted">
-                      <p className="text-body-sm font-medium mb-4">Peserta {i + 1}</p>
+                    <div key={i} className="p-5 bg-ground-muted border border-ground-subtle">
+                      <p className="text-body-sm font-bold text-ink mb-4">Tiket Peserta #{i + 1}</p>
                       <div className="flex flex-col gap-4">
                         <Input
-                          label="Nama"
+                          label="Nama Lengkap Peserta"
                           value={i === 0 && sameAsContact ? contactName : att.name}
-                          onChange={e => updateAttendee(i, 'name', e.target.value)}
+                          onChange={(e) => updateAttendee(i, 'name', e.target.value)}
                           disabled={i === 0 && sameAsContact}
                           error={errors[`att-${i}-name`]}
                         />
                         <Input
-                          label="Email"
+                          label="Email Peserta (Untuk Pengiriman E-Ticket)"
                           type="email"
                           value={i === 0 && sameAsContact ? contactEmail : att.email}
-                          onChange={e => updateAttendee(i, 'email', e.target.value)}
+                          onChange={(e) => updateAttendee(i, 'email', e.target.value)}
                           disabled={i === 0 && sameAsContact}
                           error={errors[`att-${i}-email`]}
                         />
@@ -298,7 +306,7 @@ function BookingContent() {
                 <Button variant="outline" onClick={() => { setStep(1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
                   Kembali
                 </Button>
-                <Button onClick={goToStep3}>Lanjutkan</Button>
+                <Button onClick={goToStep3}>Lanjutkan ke Konfirmasi</Button>
               </div>
             </div>
           )}
@@ -306,37 +314,35 @@ function BookingContent() {
           {/* Step 3: Confirmation */}
           {step === 3 && (
             <div>
-              <h2 className="font-display font-bold text-display-sm mb-6">Konfirmasi Pesanan</h2>
+              <h2 className="font-display font-bold text-display-sm mb-6">Ringkasan & Konfirmasi Pesanan</h2>
 
-              <div className="bg-ground-muted p-6 mb-6">
-                <h3 className="text-body font-medium mb-4">Detail Pesanan</h3>
-                {orderSummaryItems.map(item => (
+              <div className="bg-ground-muted p-6 mb-6 border border-ground-subtle">
+                <h3 className="text-body font-bold text-ink mb-4">Rincian Tiket yang Dipesan</h3>
+                {orderSummaryItems.map((item) => (
                   <div key={item.id} className="flex items-center justify-between py-3 border-b border-ground-subtle last:border-0">
                     <div>
-                      <p className="text-body">{item.name}</p>
+                      <p className="text-body font-medium">{item.name}</p>
                       <p className="text-body-sm text-ink-muted">{item.quantity}× {formatCurrency(item.price)}</p>
                     </div>
-                    <p className="text-body font-medium">{formatCurrency(item.subtotal)}</p>
+                    <p className="text-body font-bold">{formatCurrency(item.subtotal)}</p>
                   </div>
                 ))}
-                <div className="flex items-center justify-between pt-4 mt-2">
-                  <p className="text-body font-medium">Total</p>
+                <div className="flex items-center justify-between pt-4 mt-2 border-t border-ground-subtle">
+                  <p className="text-body font-bold">Total Pembayaran</p>
                   <p className="font-display font-bold text-display-sm text-accent">{formatCurrency(total)}</p>
                 </div>
               </div>
 
-              <div className="bg-ground-muted p-6 mb-6">
-                <h3 className="text-body font-medium mb-3">Kontak</h3>
-                <p className="text-body-sm">{contactName}</p>
+              <div className="bg-ground p-6 mb-6 border border-ground-subtle">
+                <h3 className="text-body font-bold text-ink mb-3">Kontak Penanggung Jawab</h3>
+                <p className="text-body-sm font-medium">{contactName}</p>
                 <p className="text-body-sm text-ink-muted">{contactEmail} · {contactPhone}</p>
               </div>
 
-              <div className="bg-accent-muted p-6 mb-8">
-                <p className="text-body font-medium text-accent mb-2">Informasi Pembayaran</p>
-                <p className="text-body-sm text-ink">
-                  Pembayaran akan diproses melalui payment gateway setelah Anda mengkonfirmasi pesanan.
-                  Integrasi payment gateway (Midtrans/Xendit) perlu dikonfigurasi dengan API key yang valid.
-                  Untuk demo, pesanan akan langsung dikonfirmasi.
+              <div className="bg-emerald-50 border border-emerald-200 p-6 mb-8 text-emerald-900">
+                <p className="text-body font-bold mb-1">Simulasi Pembayaran Terintegrasi</p>
+                <p className="text-body-sm leading-relaxed">
+                  Setelah menekan <strong>Konfirmasi Pesanan</strong>, tiket digital resmi ber-QR code unik akan langsung diterbitkan ke akun Anda dan dapat di-scan di gerbang acara.
                 </p>
               </div>
 
@@ -345,30 +351,32 @@ function BookingContent() {
                   Kembali
                 </Button>
                 <Button onClick={handleConfirm} loading={isProcessing}>
-                  Konfirmasi Pesanan
+                  Konfirmasi & Terbitkan Tiket
                 </Button>
               </div>
             </div>
           )}
 
-          {/* Step 4: Success */}
+          {/* Step 4: Success & Live E-Tickets */}
           {step === 4 && orderResult && (
-            <div className="text-center py-12">
+            <div className="text-center py-10 bg-ground border border-ground-subtle p-8">
               <div className="w-16 h-16 bg-success text-white flex items-center justify-center mx-auto mb-6">
                 <Check className="w-8 h-8" />
               </div>
-              <h2 className="font-display font-bold text-display-md">Pesanan Berhasil</h2>
-              <p className="text-body text-ink-muted mt-2">Kode pesanan Anda:</p>
-              <p className="font-display font-bold text-display-sm text-accent mt-2">{orderResult.orderCode}</p>
+              <h2 className="font-display font-bold text-display-md text-ink">Pemesanan Berhasil!</h2>
+              <p className="text-body text-ink-muted mt-2">Kode pesanan resmi Anda:</p>
+              <p className="font-mono font-bold text-display-sm text-accent mt-1">{orderResult.orderCode}</p>
+
               <p className="text-body text-ink-muted mt-4 max-w-md mx-auto">
-                E-ticket telah dibuat untuk setiap peserta. Anda dapat melihat tiket di halaman Tiket Saya.
+                {orderResult.tickets.length} E-Ticket digital ber-QR code unik telah diterbitkan dan tersimpan di akun Anda.
               </p>
+
               <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
-                <Link href="/tickets">
-                  <Button>Lihat Tiket Saya</Button>
+                <Link href={`/tickets/${orderResult.tickets[0]?.id || ''}`}>
+                  <Button size="lg">Buka E-Ticket Digital Sekarang</Button>
                 </Link>
-                <Link href="/events">
-                  <Button variant="outline">Jelajahi Event Lain</Button>
+                <Link href="/tickets">
+                  <Button variant="outline" size="lg">Lihat Semua Tiket Saya</Button>
                 </Link>
               </div>
             </div>
@@ -378,17 +386,17 @@ function BookingContent() {
         {/* Order summary sidebar */}
         {step < 4 && (
           <div className="lg:col-span-5 xl:col-span-4">
-            <div className="sticky top-24 bg-ground-muted p-6">
-              <h3 className="text-body font-medium mb-4">Ringkasan</h3>
-              <p className="text-body-sm font-medium">{eventData.title}</p>
+            <div className="sticky top-24 bg-ground-muted p-6 border border-ground-subtle">
+              <h3 className="text-body font-bold text-ink mb-3">Ringkasan Pesanan</h3>
+              <p className="text-body-sm font-semibold">{eventData.title}</p>
               <p className="text-caption text-ink-muted mt-1">
                 {formatDateRange(eventData.start_date, eventData.end_date)}
               </p>
 
               {orderSummaryItems.length > 0 && (
-                <div className="mt-4 pt-4 border-t border-ground-subtle">
-                  {orderSummaryItems.map(item => (
-                    <div key={item.id} className="flex justify-between text-body-sm py-1">
+                <div className="mt-4 pt-4 border-t border-ground-subtle space-y-2">
+                  {orderSummaryItems.map((item) => (
+                    <div key={item.id} className="flex justify-between text-body-sm">
                       <span>{item.quantity}× {item.name}</span>
                       <span className="font-medium">{formatCurrency(item.subtotal)}</span>
                     </div>
@@ -396,9 +404,9 @@ function BookingContent() {
                 </div>
               )}
 
-              <div className="mt-4 pt-4 border-t border-ground-subtle flex justify-between">
-                <span className="text-body font-medium">Total</span>
-                <span className="font-display font-bold text-body-lg">{formatCurrency(total)}</span>
+              <div className="mt-4 pt-4 border-t border-ground-subtle flex justify-between items-center">
+                <span className="text-body font-bold">Total</span>
+                <span className="font-display font-bold text-body-lg text-accent">{formatCurrency(total)}</span>
               </div>
             </div>
           </div>
@@ -412,11 +420,10 @@ export default function BookingPage() {
   return (
     <Suspense fallback={
       <div className="pt-24 md:pt-32 pb-section page-padding max-w-wide mx-auto">
-        <p className="text-body text-ink-muted">Memuat...</p>
+        <p className="text-body text-ink-muted">Memuat halaman booking...</p>
       </div>
     }>
       <BookingContent />
     </Suspense>
   );
 }
-

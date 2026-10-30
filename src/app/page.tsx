@@ -2,20 +2,23 @@
 
 import Link from 'next/link';
 import { ArrowRight, Calendar, MapPin } from 'lucide-react';
-import { MOCK_EVENTS, CATEGORIES, getTicketTypesForEvent, getCategoryById } from '@/lib/mock-data';
+import { useAppContext } from '@/lib/app-context';
 import { formatCurrency, formatDateRange, getDaysUntil, cn } from '@/lib/utils';
 import { SearchBar } from '@/components/ui/search-bar';
 import { Button } from '@/components/ui/button';
-
-function getMinPrice(eventId: string): number {
-  const tts = getTicketTypesForEvent(eventId);
-  if (tts.length === 0) return 0;
-  return Math.min(...tts.map((t) => t.price));
-}
+import { CategoryIcon } from '@/components/ui/category-icon';
 
 export default function HomePage() {
-  const featuredEvents = MOCK_EVENTS.filter((e) => e.is_featured && e.status === 'published');
-  const upcomingEvents = [...MOCK_EVENTS]
+  const { events, categories, ticketTypes } = useAppContext();
+
+  const getMinPrice = (eventId: string): number => {
+    const tts = ticketTypes.filter((t) => t.event_id === eventId);
+    if (tts.length === 0) return 0;
+    return Math.min(...tts.map((t) => t.price));
+  };
+
+  const featuredEvents = events.filter((e) => e.is_featured && e.status === 'published');
+  const upcomingEvents = [...events]
     .filter((e) => e.status === 'published')
     .sort((a, b) => a.start_date.localeCompare(b.start_date));
 
@@ -48,7 +51,7 @@ export default function HomePage() {
                     Jelajahi Event <ArrowRight className="w-5 h-5" />
                   </Button>
                 </Link>
-                <Link href="/auth/register">
+                <Link href="/dashboard/events/new">
                   <Button variant="outline" size="lg" className="border-white/20 text-white hover:bg-white hover:text-ink">
                     Buat Event Sendiri
                   </Button>
@@ -78,6 +81,7 @@ export default function HomePage() {
                   'absolute right-[28%] bottom-0 w-[58%] h-[62%] z-20 shadow-xl',
                   'absolute left-0 top-[12%] w-[48%] h-[52%] z-10 shadow-lg',
                 ];
+                const cat = categories.find((c) => c.id === event.category_id);
                 return (
                   <Link
                     key={event.id}
@@ -94,7 +98,10 @@ export default function HomePage() {
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
                     <div className="absolute inset-0 flex flex-col justify-end p-5 z-10">
-                      <span className="text-caption text-accent font-medium">{getCategoryById(event.category_id)?.name}</span>
+                      <span className="text-caption text-accent font-medium flex items-center gap-1.5">
+                        <CategoryIcon name={cat?.icon} className="w-3.5 h-3.5" />
+                        {cat?.name}
+                      </span>
                       <h3 className="font-display font-bold text-body-lg text-white mt-1 leading-tight group-hover:text-accent transition-colors">
                         {event.title}
                       </h3>
@@ -110,20 +117,20 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ── SEARCH & CATEGORIES ── */}
+      {/* ── SEARCH & CATEGORIES (NO EMOJIS, PURE SVG ICONS) ── */}
       <section className="page-padding max-w-wide mx-auto py-section-sm border-b border-ground-subtle">
         <div className="max-w-2xl mb-8">
           <p className="text-caption text-ink-faint uppercase tracking-wider mb-2 font-medium">Pencarian Langsung</p>
           <SearchBar large placeholder="Cari konser, seminar, artis, atau kota favorit..." />
         </div>
         <div className="flex flex-wrap gap-2.5">
-          {CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <Link
               key={cat.id}
               href={`/events?category=${cat.id}`}
-              className="px-4 py-2 bg-ground-muted text-body-sm text-ink font-medium hover:bg-ink hover:text-ground transition-all flex items-center gap-2"
+              className="px-4 py-2 bg-ground-muted text-body-sm text-ink font-medium hover:bg-ink hover:text-ground transition-all flex items-center gap-2 border border-ground-subtle"
             >
-              <span>{cat.icon}</span>
+              <CategoryIcon name={cat.icon} className="w-4 h-4 text-accent" />
               <span>{cat.name}</span>
             </Link>
           ))}
@@ -157,8 +164,9 @@ export default function HomePage() {
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/50 to-black/20" />
                 <div className="absolute inset-0 flex flex-col justify-end p-6 md:p-8 z-10">
-                  <span className="text-caption text-accent font-medium tracking-wider uppercase">
-                    {getCategoryById(featuredEvents[0].category_id)?.name}
+                  <span className="text-caption text-accent font-medium tracking-wider uppercase flex items-center gap-1.5">
+                    <CategoryIcon name={categories.find((c) => c.id === featuredEvents[0].category_id)?.icon} className="w-3.5 h-3.5" />
+                    {categories.find((c) => c.id === featuredEvents[0].category_id)?.name}
                   </span>
                   <h3 className="font-display font-bold text-display-sm md:text-display-md text-white mt-2 group-hover:text-accent transition-colors leading-tight">
                     {featuredEvents[0].title}
@@ -186,43 +194,47 @@ export default function HomePage() {
 
           {/* Stacked smaller cards */}
           <div className="lg:col-span-5 flex flex-col gap-6">
-            {featuredEvents.slice(1, 3).map((event) => (
-              <Link
-                key={event.id}
-                href={`/events/${event.id}`}
-                className="group block relative overflow-hidden bg-ground-dark flex-1"
-              >
-                <div className="relative aspect-[16/9] h-full overflow-hidden">
-                  <img
-                    src={event.poster_url}
-                    alt={event.title}
-                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/20" />
-                  <div className="absolute inset-0 flex flex-col justify-end p-5 md:p-6 z-10">
-                    <span className="text-caption text-accent font-medium uppercase tracking-wider">
-                      {getCategoryById(event.category_id)?.name}
-                    </span>
-                    <h3 className="font-display font-bold text-body-lg md:text-display-sm text-white mt-1 group-hover:text-accent transition-colors">
-                      {event.title}
-                    </h3>
-                    <div className="flex items-center gap-4 mt-2 text-body-sm text-white/70">
-                      <span className="flex items-center gap-1.5">
-                        <Calendar className="w-3.5 h-3.5 text-accent" />
-                        {formatDateRange(event.start_date, event.end_date)}
+            {featuredEvents.slice(1, 3).map((event) => {
+              const cat = categories.find((c) => c.id === event.category_id);
+              return (
+                <Link
+                  key={event.id}
+                  href={`/events/${event.id}`}
+                  className="group block relative overflow-hidden bg-ground-dark flex-1"
+                >
+                  <div className="relative aspect-[16/9] h-full overflow-hidden">
+                    <img
+                      src={event.poster_url}
+                      alt={event.title}
+                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/20" />
+                    <div className="absolute inset-0 flex flex-col justify-end p-5 md:p-6 z-10">
+                      <span className="text-caption text-accent font-medium uppercase tracking-wider flex items-center gap-1.5">
+                        <CategoryIcon name={cat?.icon} className="w-3.5 h-3.5" />
+                        {cat?.name}
                       </span>
-                      <span className="flex items-center gap-1.5">
-                        <MapPin className="w-3.5 h-3.5 text-accent" />
-                        {event.city}
-                      </span>
+                      <h3 className="font-display font-bold text-body-lg md:text-display-sm text-white mt-1 group-hover:text-accent transition-colors">
+                        {event.title}
+                      </h3>
+                      <div className="flex items-center gap-4 mt-2 text-body-sm text-white/70">
+                        <span className="flex items-center gap-1.5">
+                          <Calendar className="w-3.5 h-3.5 text-accent" />
+                          {formatDateRange(event.start_date, event.end_date)}
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          <MapPin className="w-3.5 h-3.5 text-accent" />
+                          {event.city}
+                        </span>
+                      </div>
+                      <p className="text-body-sm font-semibold text-white mt-2">
+                        Mulai {formatCurrency(getMinPrice(event.id))}
+                      </p>
                     </div>
-                    <p className="text-body-sm font-semibold text-white mt-2">
-                      Mulai {formatCurrency(getMinPrice(event.id))}
-                    </p>
                   </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         </div>
       </section>
@@ -246,49 +258,53 @@ export default function HomePage() {
             className="flex gap-5 overflow-x-auto pb-4 -mx-4 px-4 snap-x snap-mandatory"
             style={{ scrollbarWidth: 'thin' }}
           >
-            {upcomingEvents.map((event) => (
-              <Link
-                key={event.id}
-                href={`/events/${event.id}`}
-                className="snap-start shrink-0 w-[280px] md:w-[320px] group block bg-ground border border-ground-subtle overflow-hidden hover:shadow-xl transition-all"
-              >
-                <div className="aspect-[4/3] relative overflow-hidden bg-ground-dark">
-                  <img
-                    src={event.poster_url}
-                    alt={event.title}
-                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                  <div className="absolute top-3 left-3 bg-ground-dark/80 backdrop-blur-sm text-white px-2.5 py-1 text-caption font-medium">
-                    {getCategoryById(event.category_id)?.name}
+            {upcomingEvents.map((event) => {
+              const cat = categories.find((c) => c.id === event.category_id);
+              return (
+                <Link
+                  key={event.id}
+                  href={`/events/${event.id}`}
+                  className="snap-start shrink-0 w-[280px] md:w-[320px] group block bg-ground border border-ground-subtle overflow-hidden hover:shadow-xl transition-all"
+                >
+                  <div className="aspect-[4/3] relative overflow-hidden bg-ground-dark">
+                    <img
+                      src={event.poster_url}
+                      alt={event.title}
+                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                    <div className="absolute top-3 left-3 bg-ground-dark/80 backdrop-blur-sm text-white px-2.5 py-1 text-caption font-medium flex items-center gap-1.5">
+                      <CategoryIcon name={cat?.icon} className="w-3.5 h-3.5 text-accent" />
+                      {cat?.name}
+                    </div>
                   </div>
-                </div>
 
-                <div className="p-5">
-                  <h3 className="font-display font-bold text-body-lg text-ink group-hover:text-accent transition-colors line-clamp-1">
-                    {event.title}
-                  </h3>
-                  <div className="mt-3 flex items-center gap-1.5 text-body-sm text-ink-muted">
-                    <Calendar className="w-3.5 h-3.5 text-accent" />
-                    {formatDateRange(event.start_date, event.end_date)}
+                  <div className="p-5">
+                    <h3 className="font-display font-bold text-body-lg text-ink group-hover:text-accent transition-colors line-clamp-1">
+                      {event.title}
+                    </h3>
+                    <div className="mt-3 flex items-center gap-1.5 text-body-sm text-ink-muted">
+                      <Calendar className="w-3.5 h-3.5 text-accent" />
+                      {formatDateRange(event.start_date, event.end_date)}
+                    </div>
+                    <div className="flex items-center gap-1.5 text-body-sm text-ink-muted mt-1">
+                      <MapPin className="w-3.5 h-3.5 text-accent" />
+                      {event.venue_name}, {event.city}
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-ground-subtle flex items-center justify-between">
+                      <span className="text-caption text-ink-faint">Harga Tiket</span>
+                      <span className="font-bold text-body-sm text-ink">
+                        {getMinPrice(event.id) > 0 ? formatCurrency(getMinPrice(event.id)) : 'Gratis'}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 text-body-sm text-ink-muted mt-1">
-                    <MapPin className="w-3.5 h-3.5 text-accent" />
-                    {event.venue_name}, {event.city}
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-ground-subtle flex items-center justify-between">
-                    <span className="text-caption text-ink-faint">Harga Tiket</span>
-                    <span className="font-bold text-body-sm text-ink">
-                      {getMinPrice(event.id) > 0 ? formatCurrency(getMinPrice(event.id)) : 'Gratis'}
-                    </span>
-                  </div>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         </div>
       </section>
 
-      {/* ── CATEGORIES (EDITORIAL LIST) ── */}
+      {/* ── CATEGORIES (EDITORIAL LIST WITH SVG ICONS) ── */}
       <section className="page-padding max-w-wide mx-auto py-section">
         <div className="max-w-xl mb-12">
           <span className="text-caption text-accent uppercase tracking-wider font-medium block">Katalog Lengkap</span>
@@ -296,19 +312,21 @@ export default function HomePage() {
         </div>
 
         <div className="flex flex-col">
-          {CATEGORIES.map((cat, i) => {
-            const count = MOCK_EVENTS.filter((e) => e.category_id === cat.id && e.status === 'published').length;
+          {categories.map((cat, i) => {
+            const count = events.filter((e) => e.category_id === cat.id && e.status === 'published').length;
             return (
               <Link
                 key={cat.id}
                 href={`/events?category=${cat.id}`}
                 className={cn(
                   'group flex items-center justify-between py-6 md:py-8 transition-colors',
-                  i < CATEGORIES.length - 1 && 'border-b border-ground-subtle',
+                  i < categories.length - 1 && 'border-b border-ground-subtle',
                 )}
               >
-                <div className="flex items-center gap-6">
-                  <span className="text-2xl">{cat.icon}</span>
+                <div className="flex items-center gap-5">
+                  <div className="w-12 h-12 bg-ground-muted border border-ground-subtle flex items-center justify-center text-ink group-hover:bg-ink group-hover:text-ground transition-colors">
+                    <CategoryIcon name={cat.icon} className="w-6 h-6" />
+                  </div>
                   <div>
                     <h3 className="font-display font-bold text-display-sm group-hover:text-accent transition-colors">
                       {cat.name}
@@ -338,8 +356,8 @@ export default function HomePage() {
               Jangkau puluhan ribu peminat konser dan festival di seluruh Indonesia. Kelola kuota tiket, pantau penjualan waktu-nyata, dan validasi peserta di gerbang dengan scanner terintegrasi.
             </p>
             <div className="mt-8 flex flex-wrap gap-4">
-              <Link href="/auth/register">
-                <Button size="lg">Daftar Sebagai Penyelenggara</Button>
+              <Link href="/dashboard/events/new">
+                <Button size="lg">Buat Acara Baru</Button>
               </Link>
               <Link href="/dashboard">
                 <Button variant="outline" size="lg" className="border-white/20 text-white hover:bg-white hover:text-ink">

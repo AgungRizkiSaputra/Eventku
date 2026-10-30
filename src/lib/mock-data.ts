@@ -2,14 +2,14 @@ import { Category, Event, TicketType, User, Order, Ticket, OrderItem } from '@/t
 
 // ─── Categories ────────────────────────────────────────────
 export const CATEGORIES: Category[] = [
-  { id: 'cat-1', name: 'Konser', slug: 'konser', description: 'Konser musik dari berbagai genre', icon: '🎵' },
-  { id: 'cat-2', name: 'Festival', slug: 'festival', description: 'Festival seni, budaya, dan musik', icon: '🎪' },
-  { id: 'cat-3', name: 'Seminar', slug: 'seminar', description: 'Seminar dan diskusi panel', icon: '🎤' },
-  { id: 'cat-4', name: 'Workshop', slug: 'workshop', description: 'Workshop dan pelatihan praktis', icon: '🛠' },
-  { id: 'cat-5', name: 'Konferensi', slug: 'konferensi', description: 'Konferensi industri dan teknologi', icon: '📡' },
-  { id: 'cat-6', name: 'Pameran', slug: 'pameran', description: 'Pameran seni dan produk', icon: '🖼' },
-  { id: 'cat-7', name: 'Olahraga', slug: 'olahraga', description: 'Event olahraga dan kompetisi', icon: '⚽' },
-  { id: 'cat-8', name: 'Komunitas', slug: 'komunitas', description: 'Meetup dan acara komunitas', icon: '👥' },
+  { id: 'cat-1', name: 'Konser', slug: 'konser', description: 'Konser musik dari berbagai genre', icon: 'music' },
+  { id: 'cat-2', name: 'Festival', slug: 'festival', description: 'Festival seni, budaya, dan musik', icon: 'tent' },
+  { id: 'cat-3', name: 'Seminar', slug: 'seminar', description: 'Seminar dan diskusi panel', icon: 'mic' },
+  { id: 'cat-4', name: 'Workshop', slug: 'workshop', description: 'Workshop dan pelatihan praktis', icon: 'wrench' },
+  { id: 'cat-5', name: 'Konferensi', slug: 'konferensi', description: 'Konferensi industri dan teknologi', icon: 'laptop' },
+  { id: 'cat-6', name: 'Pameran', slug: 'pameran', description: 'Pameran seni dan produk', icon: 'palette' },
+  { id: 'cat-7', name: 'Olahraga', slug: 'olahraga', description: 'Event olahraga dan kompetisi', icon: 'trophy' },
+  { id: 'cat-8', name: 'Komunitas', slug: 'komunitas', description: 'Meetup dan acara komunitas', icon: 'users' },
 ];
 
 export const CITIES = [

@@ -3,17 +3,18 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { DashboardNav } from '@/components/dashboard/dashboard-nav';
-import { MOCK_EVENTS, MOCK_TICKET_TYPES, CATEGORIES } from '@/lib/mock-data';
+import { useAppContext } from '@/lib/app-context';
 import { formatCurrency, formatDateRange } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { PlusCircle, Search, ExternalLink, Calendar, MapPin, Eye } from 'lucide-react';
+import { PlusCircle, Search, Calendar, MapPin, Eye, QrCode } from 'lucide-react';
 
 export default function ManageEventsPage() {
+  const { events, categories, ticketTypes } = useAppContext();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
 
-  const events = MOCK_EVENTS.filter((e) => {
+  const filteredEvents = events.filter((e) => {
     const matchesSearch =
       e.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       e.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -26,8 +27,8 @@ export default function ManageEventsPage() {
     <div className="pt-24 md:pt-32 pb-section page-padding max-w-wide mx-auto">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="font-display font-bold text-display-md">Kelola Event</h1>
-          <p className="text-body text-ink-muted mt-1">Daftar semua acara, status penerbitan, dan kuota tiket Anda.</p>
+          <h1 className="font-display font-bold text-display-md">Kelola Event Penyelenggara</h1>
+          <p className="text-body text-ink-muted mt-1">Daftar seluruh acara Anda, kuota tiket, dan status tayang.</p>
         </div>
         <Link href="/dashboard/events/new">
           <Button className="gap-2">
@@ -74,14 +75,17 @@ export default function ManageEventsPage() {
       {/* Events Table / Card List */}
       <div className="bg-ground border border-ground-subtle overflow-hidden">
         <div className="divide-y divide-ground-subtle">
-          {events.length === 0 ? (
-            <div className="p-12 text-center">
-              <p className="text-body text-ink-muted">Tidak ada event yang cocok dengan pencarian Anda.</p>
+          {filteredEvents.length === 0 ? (
+            <div className="p-12 text-center text-ink-muted">
+              <p className="text-body">Tidak ada event yang cocok dengan pencarian Anda.</p>
+              <Link href="/dashboard/events/new" className="inline-block mt-4">
+                <Button size="sm">+ Buat Acara Sekarang</Button>
+              </Link>
             </div>
           ) : (
-            events.map((event) => {
-              const category = CATEGORIES.find((c) => c.id === event.category_id);
-              const tts = MOCK_TICKET_TYPES.filter((t) => t.event_id === event.id);
+            filteredEvents.map((event) => {
+              const category = categories.find((c) => c.id === event.category_id);
+              const tts = ticketTypes.filter((t) => t.event_id === event.id);
               const sold = tts.reduce((sum, t) => sum + t.sold, 0);
               const quota = tts.reduce((sum, t) => sum + t.quota, 0);
               const minPrice = tts.length > 0 ? Math.min(...tts.map((t) => t.price)) : 0;
@@ -144,12 +148,12 @@ export default function ManageEventsPage() {
                   <div className="flex items-center gap-3 shrink-0 pt-3 md:pt-0 border-t md:border-t-0 border-ground-subtle">
                     <Link href={`/events/${event.id}`} target="_blank">
                       <Button variant="outline" size="sm" className="gap-1.5">
-                        <Eye className="w-4 h-4" /> Lihat Halaman
+                        <Eye className="w-4 h-4" /> Pratinjau
                       </Button>
                     </Link>
                     <Link href="/dashboard/scanner">
                       <Button variant="secondary" size="sm" className="gap-1.5">
-                        Scan QR
+                        <QrCode className="w-4 h-4" /> Scan QR
                       </Button>
                     </Link>
                   </div>
@@ -162,4 +166,3 @@ export default function ManageEventsPage() {
     </div>
   );
 }
-

@@ -4,11 +4,14 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DashboardNav } from '@/components/dashboard/dashboard-nav';
-import { CATEGORIES, CITIES } from '@/lib/mock-data';
+import { useAppContext } from '@/lib/app-context';
+import { useAuth } from '@/lib/auth-context';
+import { CITIES } from '@/lib/mock-data';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { Plus, Trash2, CheckCircle, ArrowLeft } from 'lucide-react';
+import { slugify } from '@/lib/utils';
 
 interface TicketTierInput {
   name: string;
@@ -20,22 +23,24 @@ interface TicketTierInput {
 
 export default function NewEventPage() {
   const router = useRouter();
+  const { user } = useAuth();
+  const { categories, createEvent } = useAppContext();
 
   const [title, setTitle] = useState('');
-  const [categoryId, setCategoryId] = useState('cat-1');
+  const [categoryId, setCategoryId] = useState(categories[0]?.id || 'cat-1');
   const [shortDesc, setShortDesc] = useState('');
   const [description, setDescription] = useState('');
   const [venueName, setVenueName] = useState('');
   const [venueAddress, setVenueAddress] = useState('');
   const [city, setCity] = useState('Jakarta');
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useState('2027-09-10');
+  const [endDate, setEndDate] = useState('2027-09-11');
   const [startTime, setStartTime] = useState('19:00');
-  const [endTime, setEndTime] = useState('22:00');
+  const [endTime, setEndTime] = useState('23:00');
 
   const [tickets, setTickets] = useState<TicketTierInput[]>([
-    { name: 'Early Bird', price: 150000, quota: 100, description: 'Akses masuk umum harga spesial', max_per_order: 4 },
-    { name: 'Presale / Regular', price: 250000, quota: 500, description: 'Akses tiket umum', max_per_order: 4 },
+    { name: 'Early Bird', price: 150000, quota: 100, description: 'Akses masuk umum harga promo spesial', max_per_order: 4 },
+    { name: 'Presale / Regular', price: 250000, quota: 500, description: 'Akses tiket umum seluruh panggung', max_per_order: 4 },
   ]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -44,7 +49,7 @@ export default function NewEventPage() {
   const addTicketTier = () => {
     setTickets([
       ...tickets,
-      { name: 'VIP Pass', price: 500000, quota: 50, description: 'Akses panggung depan dan souvenir', max_per_order: 2 },
+      { name: 'VIP Pass', price: 500000, quota: 50, description: 'Akses panggung depan, lounge eksklusif & merchandise', max_per_order: 2 },
     ]);
   };
 
@@ -62,15 +67,44 @@ export default function NewEventPage() {
     e.preventDefault();
     setIsSubmitting(true);
 
-    // Simulate API request
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const posterPool = [
+      '/images/events/nusantara-sound.jpg',
+      '/images/events/jakjazz.jpg',
+      '/images/events/tech-summit.jpg',
+      '/images/events/street-photo.jpg',
+      '/images/events/bdg-design.jpg',
+    ];
+    const chosenPoster = posterPool[Math.floor(Math.random() * posterPool.length)];
+
+    // Persist new event in reactive central state
+    createEvent({
+      title: title.trim(),
+      slug: slugify(title.trim()) + '-' + Date.now().toString().slice(-4),
+      category_id: categoryId,
+      organizer_id: user?.id || 'org-1',
+      description: description.trim(),
+      short_description: shortDesc.trim(),
+      poster_url: chosenPoster,
+      venue_name: venueName.trim(),
+      venue_address: venueAddress.trim(),
+      city,
+      start_date: startDate,
+      end_date: endDate,
+      start_time: startTime,
+      end_time: endTime,
+      timezone: 'Asia/Jakarta',
+      status: 'published',
+      is_featured: false,
+      tags: [title.split(' ')[0].toLowerCase(), city.toLowerCase()],
+      ticket_types: tickets,
+    });
 
     setIsSubmitting(false);
     setSuccess(true);
 
     setTimeout(() => {
       router.push('/dashboard/events');
-    }, 2000);
+    }, 1200);
   };
 
   return (
@@ -88,9 +122,9 @@ export default function NewEventPage() {
       {success ? (
         <div className="bg-emerald-50 border border-emerald-200 p-8 text-center max-w-xl mx-auto my-12">
           <CheckCircle className="w-12 h-12 text-success mx-auto mb-4" />
-          <h2 className="font-display font-bold text-display-sm text-ink">Event Berhasil Dibuat!</h2>
+          <h2 className="font-display font-bold text-display-sm text-ink">Event Berhasil Diterbitkan!</h2>
           <p className="text-body text-ink-muted mt-2">
-            Acara Anda telah didaftarkan dan siap dipublikasikan ke publik. Mengalihkan ke dashboard...
+            Acara baru Anda telah berhasil tersimpan dan langsung muncul di halaman jelajahi event serta dashboard.
           </p>
         </div>
       ) : (
@@ -105,7 +139,7 @@ export default function NewEventPage() {
               label="Judul Event"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Contoh: Jakarta Indie Music Festival 2027"
+              placeholder="Contoh: Jakarta International Indie Festival 2027"
               required
             />
 
@@ -113,7 +147,7 @@ export default function NewEventPage() {
               label="Kategori Event"
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              options={CATEGORIES.map((c) => ({ value: c.id, label: c.name }))}
+              options={categories.map((c) => ({ value: c.id, label: c.name }))}
             />
 
             <div>
@@ -166,7 +200,7 @@ export default function NewEventPage() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <Input
-                label="Waktu Mulai (WIB)"
+                label="Waktu Mulai"
                 type="time"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
@@ -201,7 +235,7 @@ export default function NewEventPage() {
               label="Alamat Lengkap Venue"
               value={venueAddress}
               onChange={(e) => setVenueAddress(e.target.value)}
-              placeholder="Jl. Gatot Subroto No. XX, Jakarta Selatan"
+              placeholder="Jl. Gatot Subroto No. XX, Jakarta Pusat"
               required
             />
           </div>
@@ -221,7 +255,7 @@ export default function NewEventPage() {
               {tickets.map((tier, idx) => (
                 <div key={idx} className="p-5 bg-ground-muted relative border border-ground-subtle">
                   <div className="flex items-center justify-between mb-4">
-                    <span className="font-medium text-body-sm text-ink">Tiket Tier #{idx + 1}</span>
+                    <span className="font-bold text-body-sm text-ink">Tier #{idx + 1}</span>
                     {tickets.length > 1 && (
                       <button
                         type="button"
@@ -243,7 +277,7 @@ export default function NewEventPage() {
                       required
                     />
                     <Input
-                      label="Harga (IDR)"
+                      label="Harga Tiket (IDR)"
                       type="number"
                       value={tier.price.toString()}
                       onChange={(e) => updateTicketTier(idx, 'price', parseInt(e.target.value) || 0)}
@@ -261,7 +295,7 @@ export default function NewEventPage() {
                       required
                     />
                     <Input
-                      label="Maksimal Tiket per Transaksi"
+                      label="Batas Maksimal per Transaksi"
                       type="number"
                       value={tier.max_per_order.toString()}
                       onChange={(e) => updateTicketTier(idx, 'max_per_order', parseInt(e.target.value) || 1)}
@@ -273,7 +307,7 @@ export default function NewEventPage() {
                     label="Keterangan Fasilitas Tiket"
                     value={tier.description}
                     onChange={(e) => updateTicketTier(idx, 'description', e.target.value)}
-                    placeholder="Contoh: Termasuk minuman, lanyard eksklusif, dan akses jalur cepat"
+                    placeholder="Contoh: Termasuk minuman gratis dan akses jalur khusus"
                   />
                 </div>
               ))}
@@ -295,4 +329,3 @@ export default function NewEventPage() {
     </div>
   );
 }
-

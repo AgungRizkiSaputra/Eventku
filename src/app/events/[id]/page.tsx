@@ -3,54 +3,57 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { Calendar, Clock, MapPin, Users, Share2, Check, ArrowRight, Minus, Plus } from 'lucide-react';
-import { getEventWithDetails, getCategoryById, MOCK_EVENTS, getTicketTypesForEvent } from '@/lib/mock-data';
-import { formatCurrency, formatDate, formatTime, formatDateRange, getRelativeTime, cn } from '@/lib/utils';
+import { Calendar, Clock, MapPin, Share2, Check, ArrowRight, Minus, Plus } from 'lucide-react';
+import { useAppContext } from '@/lib/app-context';
+import { formatCurrency, formatTime, formatDateRange, getRelativeTime } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-
-const POSTER_COLORS: Record<string, string> = {
-  'evt-1': 'bg-[#1a1a2e]', 'evt-2': 'bg-[#16213e]', 'evt-3': 'bg-[#0f3460]',
-  'evt-4': 'bg-[#533483]', 'evt-5': 'bg-[#e94560]', 'evt-6': 'bg-[#2d4059]',
-  'evt-7': 'bg-[#3c6255]', 'evt-8': 'bg-[#a13333]', 'evt-9': 'bg-[#1b262c]',
-  'evt-10': 'bg-[#4a0e0e]',
-};
+import { CategoryIcon } from '@/components/ui/category-icon';
 
 export default function EventDetailPage() {
   const params = useParams();
   const eventId = params.id as string;
-  const eventData = getEventWithDetails(eventId);
+  const { events, categories, ticketTypes, users } = useAppContext();
+
+  const eventData = events.find((e) => e.id === eventId || e.slug === eventId);
+  const category = categories.find((c) => c.id === eventData?.category_id);
+  const eventTicketTypes = ticketTypes.filter((tt) => tt.event_id === eventData?.id);
+  const organizer = users.find((u) => u.id === eventData?.organizer_id) || {
+    id: 'org-default',
+    full_name: 'Penyelenggara Terverifikasi',
+    email: 'contact@organizer.id',
+    role: 'organizer',
+  };
 
   const [selectedTickets, setSelectedTickets] = useState<Record<string, number>>({});
   const [copied, setCopied] = useState(false);
 
   const total = useMemo(() => {
-    if (!eventData) return 0;
-    return eventData.ticket_types.reduce((sum, tt) => {
+    return eventTicketTypes.reduce((sum, tt) => {
       return sum + (selectedTickets[tt.id] || 0) * tt.price;
     }, 0);
-  }, [selectedTickets, eventData]);
+  }, [selectedTickets, eventTicketTypes]);
 
-  const hasSelection = Object.values(selectedTickets).some(q => q > 0);
+  const hasSelection = Object.values(selectedTickets).some((q) => q > 0);
 
   if (!eventData) {
     return (
       <div className="pt-24 md:pt-32 pb-section page-padding max-w-wide mx-auto text-center">
-        <h1 className="font-display font-bold text-display-md">Event tidak ditemukan</h1>
-        <p className="text-body text-ink-muted mt-4">Event yang Anda cari tidak tersedia.</p>
+        <h1 className="font-display font-bold text-display-md">Event Tidak Ditemukan</h1>
+        <p className="text-body text-ink-muted mt-4">Acara yang Anda tuju mungkin telah dipindahkan atau dinonaktifkan.</p>
         <Link href="/events" className="inline-block mt-8">
-          <Button>Kembali ke Jelajahi</Button>
+          <Button>Kembali ke Katalog Event</Button>
         </Link>
       </div>
     );
   }
 
   const updateQuantity = (ticketTypeId: string, delta: number) => {
-    const tt = eventData.ticket_types.find(t => t.id === ticketTypeId);
+    const tt = eventTicketTypes.find((t) => t.id === ticketTypeId);
     if (!tt) return;
     const current = selectedTickets[ticketTypeId] || 0;
     const next = Math.max(0, Math.min(current + delta, tt.max_per_order, tt.quota - tt.sold));
-    setSelectedTickets(prev => ({ ...prev, [ticketTypeId]: next }));
+    setSelectedTickets((prev) => ({ ...prev, [ticketTypeId]: next }));
   };
 
   const handleShare = async () => {
@@ -59,14 +62,12 @@ export default function EventDetailPage() {
       await navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // fallback
-    }
+    } catch {}
   };
 
-  const relatedEvents = MOCK_EVENTS.filter(
-    e => e.category_id === eventData.category_id && e.id !== eventData.id && e.status === 'published'
-  ).slice(0, 3);
+  const relatedEvents = events
+    .filter((e) => e.category_id === eventData.category_id && e.id !== eventData.id && e.status === 'published')
+    .slice(0, 3);
 
   const bookingParams = new URLSearchParams();
   Object.entries(selectedTickets).forEach(([id, qty]) => {
@@ -75,9 +76,8 @@ export default function EventDetailPage() {
 
   return (
     <>
-      {/* Hero */}
-      <section className="pt-20 md:pt-24 relative overflow-hidden bg-ground-dark min-h-[440px] flex items-center">
-        {/* Background Image with blur and dark scrim */}
+      {/* Hero with Cinematic Visual Backdrop */}
+      <section className="pt-20 md:pt-24 relative overflow-hidden bg-ground-dark min-h-[460px] flex items-center">
         <div className="absolute inset-0">
           <img
             src={eventData.poster_url}
@@ -90,9 +90,14 @@ export default function EventDetailPage() {
         <div className="page-padding max-w-wide mx-auto py-12 md:py-20 relative z-10 w-full">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
             <div className="md:col-span-8 stagger-children">
-              <Badge variant="accent" className="mb-4">
-                {eventData.category.name}
-              </Badge>
+              <div className="flex items-center gap-2 mb-4">
+                <Badge variant="accent" className="flex items-center gap-1.5">
+                  <CategoryIcon name={category?.icon} className="w-3.5 h-3.5" />
+                  {category?.name}
+                </Badge>
+                {eventData.is_featured && <Badge variant="warning">Unggulan</Badge>}
+              </div>
+
               <h1 className="font-display font-bold text-display-lg md:text-display-xl text-white">
                 {eventData.title}
               </h1>
@@ -113,7 +118,7 @@ export default function EventDetailPage() {
               </div>
 
               <p className="text-body text-white/50 mt-4">
-                Diselenggarakan oleh <span className="text-white/80 font-medium">{eventData.organizer.full_name}</span> · {getRelativeTime(eventData.start_date)}
+                Diselenggarakan oleh <span className="text-white/80 font-medium">{organizer.full_name}</span> · {getRelativeTime(eventData.start_date)}
               </p>
             </div>
 
@@ -131,14 +136,13 @@ export default function EventDetailPage() {
         </div>
       </section>
 
-      {/* Content */}
+      {/* Content Section */}
       <section className="page-padding max-w-wide mx-auto py-section-sm">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
           {/* Main content */}
           <div className="lg:col-span-7 xl:col-span-8">
-            {/* Description */}
             <div>
-              <h2 className="font-display font-bold text-display-sm mb-6">Tentang Event</h2>
+              <h2 className="font-display font-bold text-display-sm mb-6">Tentang Acara</h2>
               <div className="text-body text-ink leading-relaxed whitespace-pre-line">
                 {eventData.description}
               </div>
@@ -155,14 +159,14 @@ export default function EventDetailPage() {
 
             {/* Schedule */}
             <div className="mt-section-sm">
-              <h2 className="font-display font-bold text-display-sm mb-6">Jadwal</h2>
-              <div className="bg-ground-muted p-6">
+              <h2 className="font-display font-bold text-display-sm mb-6">Jadwal & Waktu</h2>
+              <div className="bg-ground-muted p-6 border border-ground-subtle">
                 <div className="flex items-start gap-4">
-                  <Calendar className="w-5 h-5 text-ink-muted mt-0.5 shrink-0" />
+                  <Calendar className="w-5 h-5 text-accent mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-body font-medium">{formatDateRange(eventData.start_date, eventData.end_date)}</p>
+                    <p className="text-body font-bold text-ink">{formatDateRange(eventData.start_date, eventData.end_date)}</p>
                     <p className="text-body-sm text-ink-muted mt-1">
-                      {formatTime(eventData.start_time)} – {formatTime(eventData.end_time)} ({eventData.timezone})
+                      Pintu dibuka: {formatTime(eventData.start_time)} s/d {formatTime(eventData.end_time)} ({eventData.timezone})
                     </p>
                   </div>
                 </div>
@@ -171,28 +175,28 @@ export default function EventDetailPage() {
 
             {/* Location */}
             <div className="mt-section-sm">
-              <h2 className="font-display font-bold text-display-sm mb-6">Lokasi</h2>
-              <div className="bg-ground-muted p-6">
+              <h2 className="font-display font-bold text-display-sm mb-6">Lokasi Acara</h2>
+              <div className="bg-ground-muted p-6 border border-ground-subtle">
                 <div className="flex items-start gap-4">
-                  <MapPin className="w-5 h-5 text-ink-muted mt-0.5 shrink-0" />
+                  <MapPin className="w-5 h-5 text-accent mt-0.5 shrink-0" />
                   <div>
-                    <p className="text-body font-medium">{eventData.venue_name}</p>
+                    <p className="text-body font-bold text-ink">{eventData.venue_name}</p>
                     <p className="text-body-sm text-ink-muted mt-1">{eventData.venue_address}, {eventData.city}</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Organizer */}
+            {/* Organizer Card */}
             <div className="mt-section-sm">
               <h2 className="font-display font-bold text-display-sm mb-6">Penyelenggara</h2>
-              <div className="flex items-center gap-4">
-                <span className="w-12 h-12 bg-accent text-white flex items-center justify-center text-body-lg font-bold shrink-0">
-                  {eventData.organizer.full_name.charAt(0)}
+              <div className="flex items-center gap-4 p-5 bg-ground border border-ground-subtle">
+                <span className="w-12 h-12 bg-ink text-ground flex items-center justify-center text-body-lg font-bold shrink-0">
+                  {organizer.full_name.charAt(0)}
                 </span>
                 <div>
-                  <p className="text-body font-medium">{eventData.organizer.full_name}</p>
-                  <p className="text-body-sm text-ink-muted">{eventData.organizer.email}</p>
+                  <p className="text-body font-bold text-ink">{organizer.full_name}</p>
+                  <p className="text-caption text-ink-muted">{organizer.email}</p>
                 </div>
               </div>
             </div>
@@ -204,18 +208,18 @@ export default function EventDetailPage() {
                 className="flex items-center gap-2 text-body-sm text-ink-muted hover:text-ink transition-colors"
               >
                 {copied ? <Check className="w-4 h-4 text-success" /> : <Share2 className="w-4 h-4" />}
-                {copied ? 'Link disalin' : 'Bagikan event ini'}
+                {copied ? 'Tautan berhasil disalin!' : 'Bagikan acara ini'}
               </button>
             </div>
           </div>
 
-          {/* Ticket sidebar */}
+          {/* Sticky Ticket Selector */}
           <div className="lg:col-span-5 xl:col-span-4">
-            <div className="sticky top-24 bg-ground-muted p-6 md:p-8">
+            <div className="sticky top-24 bg-ground-muted p-6 md:p-8 border border-ground-subtle">
               <h2 className="font-display font-bold text-display-sm mb-6">Pilih Tiket</h2>
 
               <div className="flex flex-col gap-4">
-                {eventData.ticket_types.map((tt) => {
+                {eventTicketTypes.map((tt) => {
                   const remaining = tt.quota - tt.sold;
                   const isSoldOut = remaining <= 0;
                   const qty = selectedTickets[tt.id] || 0;
@@ -223,22 +227,21 @@ export default function EventDetailPage() {
                   return (
                     <div
                       key={tt.id}
-                      className={cn(
-                        'p-4 bg-ground transition-colors',
-                        isSoldOut && 'opacity-50',
-                      )}
+                      className={`p-4 bg-ground border border-ground-subtle transition-colors ${
+                        isSoldOut ? 'opacity-50' : ''
+                      }`}
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1">
-                          <h3 className="text-body font-medium">{tt.name}</h3>
+                          <h3 className="text-body font-bold text-ink">{tt.name}</h3>
                           {tt.description && (
-                            <p className="text-body-sm text-ink-muted mt-1">{tt.description}</p>
+                            <p className="text-caption text-ink-muted mt-1">{tt.description}</p>
                           )}
-                          <p className="text-body font-medium text-accent mt-2">
+                          <p className="text-body font-bold text-accent mt-2">
                             {tt.price > 0 ? formatCurrency(tt.price) : 'Gratis'}
                           </p>
                           <p className="text-caption text-ink-faint mt-1">
-                            {isSoldOut ? 'Habis terjual' : `${remaining} tersisa`}
+                            {isSoldOut ? 'Tiket Habis' : `Tersisa ${remaining} tiket`}
                           </p>
                         </div>
 
@@ -252,7 +255,7 @@ export default function EventDetailPage() {
                             >
                               <Minus className="w-4 h-4" />
                             </button>
-                            <span className="w-8 text-center text-body font-medium">{qty}</span>
+                            <span className="w-8 text-center text-body font-bold">{qty}</span>
                             <button
                               onClick={() => updateQuantity(tt.id, 1)}
                               disabled={qty >= tt.max_per_order || qty >= remaining}
@@ -269,21 +272,23 @@ export default function EventDetailPage() {
                 })}
               </div>
 
-              {/* Total */}
+              {/* Total calculation */}
               <div className="mt-6 pt-6 border-t border-ground-subtle">
                 <div className="flex items-center justify-between mb-4">
-                  <span className="text-body text-ink-muted">Total</span>
-                  <span className="font-display font-bold text-display-sm">
+                  <span className="text-body text-ink-muted">Total Pembayaran</span>
+                  <span className="font-display font-bold text-display-sm text-ink">
                     {formatCurrency(total)}
                   </span>
                 </div>
 
                 <Link
                   href={hasSelection ? `/events/${eventData.id}/booking?${bookingParams.toString()}` : '#'}
-                  onClick={(e) => { if (!hasSelection) e.preventDefault(); }}
+                  onClick={(e) => {
+                    if (!hasSelection) e.preventDefault();
+                  }}
                 >
                   <Button fullWidth size="lg" disabled={!hasSelection}>
-                    Pesan Tiket
+                    Pesan Tiket Sekarang
                   </Button>
                 </Link>
               </div>
@@ -292,19 +297,24 @@ export default function EventDetailPage() {
         </div>
       </section>
 
-      {/* Related events */}
+      {/* Related Events */}
       {relatedEvents.length > 0 && (
         <section className="page-padding max-w-wide mx-auto py-section-sm border-t border-ground-subtle">
           <div className="flex items-end justify-between mb-10">
-            <h2 className="font-display font-bold text-display-sm">Event Lainnya</h2>
+            <div>
+              <span className="text-caption text-accent uppercase tracking-wider font-medium block">Rekomendasi Terkait</span>
+              <h2 className="font-display font-bold text-display-sm">Acara Serupa Lainnya</h2>
+            </div>
             <Link href={`/events?category=${eventData.category_id}`} className="text-body-sm text-ink-muted hover:text-ink flex items-center gap-1">
-              Lihat semua <ArrowRight className="w-4 h-4" />
+              Lihat kategori ini <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {relatedEvents.map((event) => {
-              const minPrice = Math.min(...getTicketTypesForEvent(event.id).map(t => t.price));
+              const tts = ticketTypes.filter((t) => t.event_id === event.id);
+              const minPrice = tts.length > 0 ? Math.min(...tts.map((t) => t.price)) : 0;
+
               return (
                 <Link key={event.id} href={`/events/${event.id}`} className="group block bg-ground border border-ground-subtle overflow-hidden">
                   <div className="aspect-[16/10] relative overflow-hidden bg-ground-dark">
@@ -338,4 +348,3 @@ export default function EventDetailPage() {
     </>
   );
 }
-

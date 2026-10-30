@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { Inter, DM_Sans } from 'next/font/google';
 import { AuthProvider } from '@/lib/auth-context';
+import { AppProvider } from '@/lib/app-context';
 import { Navbar } from '@/components/layout/navbar';
 import { Footer } from '@/components/layout/footer';
 import './globals.css';
@@ -35,11 +36,13 @@ export default function RootLayout({
     <html lang="id" className={`${inter.variable} ${dmSans.variable}`}>
       <body className="font-body bg-ground text-ink min-h-screen flex flex-col">
         <AuthProvider>
-          <Navbar />
-          <main className="flex-1">
-            {children}
-          </main>
-          <Footer />
+          <AppProvider>
+            <Navbar />
+            <main className="flex-1">
+              {children}
+            </main>
+            <Footer />
+          </AppProvider>
         </AuthProvider>
       </body>
     </html>
